@@ -40,6 +40,7 @@
 #include <sys/socket.h>
 #include <sys/sysctl.h>
 #include <sys/user.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 #include <libprocstat.h>
 #else
@@ -275,7 +276,27 @@ char *os_get_program_data_path_ptr(const char *name)
 char *os_get_executable_path_ptr(const char *name)
 {
 	char exe[PATH_MAX];
+#if defined(__FreeBSD__) || defined(__DragonFly__)
+	int sysctlname[4];
+	size_t pathlen;
+	ssize_t count;
+
+	sysctlname[0] = CTL_KERN;
+	sysctlname[1] = KERN_PROC;
+	sysctlname[2] = KERN_PROC_PATHNAME;
+	sysctlname[3] = -1;
+
+	pathlen = PATH_MAX;
+	count = sysctl(sysctlname, nitems(sysctlname), exe, &pathlen, NULL, 0);
+	if (count == -1) {
+		blog(LOG_ERROR, "sysctl(KERN_PROC_PATHNAME) failed, errno %d",
+		     errno);
+		return NULL;
+	}
+	count = pathlen;
+#else
 	ssize_t count = readlink("/proc/self/exe", exe, PATH_MAX);
+#endif
 	const char *path_out = NULL;
 	struct dstr path;
 
